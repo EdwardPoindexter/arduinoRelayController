@@ -3,7 +3,11 @@ Edward Poindexter
 
 Relay controller and power sequencer
 coded for arduino nano with SainSmart 4Relay board
-
+added code for physical switches
+code monitors usb com port and checks for these commands
+PWRON   = turn unit power on 
+PWROFF  = turn unit power off
+STATUS  = return the unit power on/off status
 */
 
 
@@ -19,6 +23,7 @@ char cmd[10];
 int cmdIndex;
 char incomingByte;
 int statusFlag;
+int switchStatusFlag;
 
 void setup() {
   // put your setup code here, to run once:
@@ -26,11 +31,12 @@ void setup() {
   pinMode(voltageOne, OUTPUT);
   pinMode(voltageTwo, OUTPUT);
   pinMode(voltageThree, OUTPUT);
-  //pinMode(switchOne, INPUT);
-  //pinMode(switchTwo, INPUT);
-  //pinMode(switchThree, INPUT);  
+  pinMode(switchOne, INPUT_PULLUP);   //temp pullup for board test
+  pinMode(switchTwo, INPUT_PULLUP);   //temp pullup for board test
+  pinMode(switchThree, INPUT_PULLUP); //temp pullup for bard test 
   cmdIndex = 0;
   statusFlag = 0;
+  switchStatusFlag = 0;
   //switch voltages off SainSmart Relay is active low
   digitalWrite(voltageOne, HIGH);
   digitalWrite(voltageTwo, HIGH);
@@ -40,7 +46,8 @@ void setup() {
     ; //wait for serial port to connect. Needed for native usb only
   }
 
-  Serial.print("Welcome to my test!\n");
+  Serial.print("*******     RELAY (POWER) CONTROLLER *********\n");
+  Serial.print("*** COMMANDS ARE:| PWRON | PWROFF | STATUS |**\n");
   Serial.print("***************** PUTTY SETUP ****************\n");
   Serial.print("Terminal; Implicit CR in every LF\n");
   Serial.print("Terminal; Local echo Force on\n");
@@ -72,26 +79,43 @@ void powerOffSeq() {
   digitalWrite(voltageOne, HIGH);
 }
 
-void checkSwitch(int statusFlag) {
+int checkSwitch(int statusFlag) {
   //check the state of external switches
   if (statusFlag == 0){
     if (digitalRead(switchOne) == HIGH){
       digitalWrite(voltageOne, LOW);
-      delay(1000);
-      if (digitalRead(switchTwo) == HIGH){
-        digitalWrite(voltageTwo, LOW);
-        delay(1000);
-        if (digitalRead(switchThree) == HIGH){
-          digitalWrite(voltageThree,LOW);
-          delay(1000);
-        }
-      }
+    }else{
+      digitalWrite(voltageOne, HIGH);
     }
-  }
-  //unit is powered remotely 
+    delay(100);
+    if (digitalRead(switchTwo) == HIGH){
+      digitalWrite(voltageTwo, LOW);
+    }else{
+      digitalWrite(voltageTwo, HIGH);
+    }
+    delay(100);
+    if (digitalRead(switchThree) == HIGH){
+      digitalWrite(voltageThree,LOW);
+    }else{
+      digitalWrite(voltageThree,HIGH);
+    }
+   }else{
+     //unit is powered remotely
+     //TODO In future display remote controlled on oled    
+   }
+   if (digitalRead(switchOne) == HIGH && digitalRead(switchTwo) == HIGH && digitalRead(switchThree) == HIGH){
+    //manual power is on
+    switchStatusFlag = 1;
+   }
+   if (digitalRead(switchOne) == LOW && digitalRead(switchTwo) == LOW && digitalRead(switchThree) == LOW){
+    //manual power is off
+    switchStatusFlag = 0;
+   }
+   return switchStatusFlag;   
 }
 
-int checkComm() {
+int checkComm(int switchStatusFlag) {
+   //check the com port 
    if (incomingByte=Serial.available()>0) {
       
       char byteIn = Serial.read();
@@ -115,8 +139,12 @@ int checkComm() {
           statusFlag = 0;
         }else if (strcmp(cmd, "STATUS")  == 0) {
           Serial.println("Command received: STATUS");
-          if(statusFlag == 1) {
-            Serial.println("Power is ON");
+          if((statusFlag == 1) && (switchStatusFlag == 1)) {
+            Serial.println("Comm AND Manual Set Power is ON");
+          }else if ((statusFlag == 1) && (switchStatusFlag == 0)) {
+            Serial.println("Comm Set Power is ON");
+          }else if ((statusFlag == 0) && (switchStatusFlag == 1)) {
+            Serial.println("Manually Set Power is ON");           
           }else{
             Serial.println("Power is OFF");   
           }
@@ -135,6 +163,6 @@ int checkComm() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-  statusFlag = checkComm();
-  checkSwitch(statusFlag);
+  statusFlag = checkComm(switchStatusFlag);
+  switchStatusFlag = checkSwitch(statusFlag);
 }
