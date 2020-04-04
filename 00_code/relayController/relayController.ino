@@ -1,3 +1,11 @@
+/*
+Edward Poindexter
+
+Relay controller and power sequencer
+coded for arduino nano with SainSmart 4Relay board
+
+*/
+
 
 const int voltageOne = 2;
 const int voltageTwo = 3;
