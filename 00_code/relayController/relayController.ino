@@ -10,9 +10,9 @@ coded for arduino nano with SainSmart 4Relay board
 const int voltageOne = 2;
 const int voltageTwo = 3;
 const int voltageThree = 4;
-//const int switchOne = 5;
-//const int switchTwo = 6;
-//const int switchThree = 7;
+const int switchOne = 5;
+const int switchTwo = 6;
+const int switchThree = 7;
 const int MAX_CMD_LENGTH = 10;
 
 char cmd[10];
@@ -51,7 +51,7 @@ void setup() {
 void powerOnSeq() {
   // power on sequence
   // turn on first supply
-  digitalWrite(voltageOne, LOW); //SainSamrt Relay, low for on
+  digitalWrite(voltageOne, LOW); //SainSmart Relay, low for on
   // turn on second supply
   delay(1500);
   digitalWrite(voltageTwo, LOW);
@@ -72,11 +72,26 @@ void powerOffSeq() {
   digitalWrite(voltageOne, HIGH);
 }
 
-void loop() {
-  // put your main code here, to run repeatedly:
-  //if (Serial.available())
-  //  Serial.write(Serial.read());
+void checkSwitch(int statusFlag) {
+  //check the state of external switches
+  if (statusFlag == 0){
+    if (digitalRead(switchOne) == HIGH){
+      digitalWrite(voltageOne, LOW);
+      delay(1000);
+      if (digitalRead(switchTwo) == HIGH){
+        digitalWrite(voltageTwo, LOW);
+        delay(1000);
+        if (digitalRead(switchThree) == HIGH){
+          digitalWrite(voltageThree,LOW);
+          delay(1000);
+        }
+      }
+    }
+  }
+  //unit is powered remotely 
+}
 
+int checkComm() {
    if (incomingByte=Serial.available()>0) {
       
       char byteIn = Serial.read();
@@ -114,5 +129,12 @@ void loop() {
           cmdIndex = 0;
         }
       }
-    }    
+    }
+    return statusFlag;  
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  statusFlag = checkComm();
+  checkSwitch(statusFlag);
 }
