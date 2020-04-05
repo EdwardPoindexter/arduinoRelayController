@@ -9,7 +9,16 @@ PWRON   = turn unit power on
 PWROFF  = turn unit power off
 STATUS  = return the unit power on/off status
 */
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+
+// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 const int voltageOne = 2;
 const int voltageTwo = 3;
@@ -46,6 +55,12 @@ void setup() {
     ; //wait for serial port to connect. Needed for native usb only
   }
 
+  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x64
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
+  }
+
   Serial.print("*******     RELAY (POWER) CONTROLLER *********\n");
   Serial.print("*** COMMANDS ARE:| PWRON | PWROFF | STATUS |**\n");
   Serial.print("***************** PUTTY SETUP ****************\n");
@@ -53,6 +68,16 @@ void setup() {
   Serial.print("Terminal; Local echo Force on\n");
   Serial.print("Use CTRL+J to enter command in putty terminal.\n");
   Serial.print("**********************************************\n");
+
+  //add oled display
+  delay(2000);
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
+  // Display static text
+  display.println("DEVELOPMENT UNIT");
+  display.display();
 }
 
 void powerOnSeq() {
@@ -77,6 +102,37 @@ void powerOffSeq() {
   // turn off first supply
   delay(500);
   digitalWrite(voltageOne, HIGH);
+}
+
+void displayRemoteControl(int statusFlag){
+  //unit is controlled remotely
+  display.setTextSize(5);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 5);
+  // Display static text
+  if (statusFlag == 1){
+    display.println("UNIT CONTROLLED REMOTELY");
+    display.display();
+    display.startscrollleft(0x00, 0x0F);
+  }else{
+    display.println("");
+    display.display();
+  }
+  
+}
+
+void displayPowerStatus(int statusFlag){
+  //power status to oled
+  display.setTextSize(10);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 15);
+  // Display static text
+  if (statusFlag == 1){
+    display.println("POWER ON");
+  }else{
+    display.println("POWER OFF");
+  }
+  display.display();  
 }
 
 int checkSwitch(int statusFlag) {
@@ -158,6 +214,8 @@ int checkComm(int switchStatusFlag) {
         }
       }
     }
+    displayRemoteControl(statusFlag);
+    displayPowerStatus(statusFlag);
     return statusFlag;  
 }
 
