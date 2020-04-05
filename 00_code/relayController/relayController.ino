@@ -42,7 +42,7 @@ void setup() {
   pinMode(voltageThree, OUTPUT);
   pinMode(switchOne, INPUT_PULLUP);   //temp pullup for board test
   pinMode(switchTwo, INPUT_PULLUP);   //temp pullup for board test
-  pinMode(switchThree, INPUT_PULLUP); //temp pullup for bard test 
+  pinMode(switchThree, INPUT_PULLUP); //temp pullup for board test 
   cmdIndex = 0;
   statusFlag = 0;
   switchStatusFlag = 0;
@@ -51,10 +51,11 @@ void setup() {
   digitalWrite(voltageTwo, HIGH);
   digitalWrite(voltageThree, HIGH);
   Serial.begin(9600);
+  
   while (!Serial) {
     ; //wait for serial port to connect. Needed for native usb only
   }
-
+  
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x64
     Serial.println(F("SSD1306 allocation failed"));
@@ -72,11 +73,13 @@ void setup() {
   //add oled display
   delay(2000);
   display.clearDisplay();
-  display.setTextSize(2);
+  display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setCursor(0, 0);
   // Display static text
-  display.println("DEVELOPMENT UNIT");
+  display.println(F("DEV UNIT"));
+  display.setCursor(0, 8);
+  display.println(F("192.168.200.100"));
   display.display();
 }
 
@@ -104,35 +107,31 @@ void powerOffSeq() {
   digitalWrite(voltageOne, HIGH);
 }
 
-void displayRemoteControl(int statusFlag){
-  //unit is controlled remotely
-  display.setTextSize(5);
+void displayUpdate(int statusFlag, int switchStatusFlag){
+  display.clearDisplay();
+  display.setTextSize(1);
   display.setTextColor(WHITE);
-  display.setCursor(0, 5);
-  // Display static text
+  display.setCursor(0, 0);
+  display.println(F("DEV UNIT"));
+  display.setCursor(0, 8);
+  display.println(F("192.168.200.100"));
   if (statusFlag == 1){
-    display.println("UNIT CONTROLLED REMOTELY");
-    display.display();
-    display.startscrollleft(0x00, 0x0F);
+    display.setCursor(0, 24);
+    display.println(F("EXTERNAL CONTROL"));
+    display.setTextSize(2);
+    display.setCursor(0, 45);
+    display.println(F("POWER ON"));
+  }else if (switchStatusFlag == 1) {
+    display.setTextSize(2);
+    display.setCursor(0, 45);
+    display.println(F("POWER ON"));    
   }else{
-    display.println("");
-    display.display();
+    display.setTextSize(2);
+    display.setCursor(0, 45);
+    display.println(F("POWER OFF"));
   }
-  
-}
-
-void displayPowerStatus(int statusFlag){
-  //power status to oled
-  display.setTextSize(10);
-  display.setTextColor(WHITE);
-  display.setCursor(0, 15);
-  // Display static text
-  if (statusFlag == 1){
-    display.println("POWER ON");
-  }else{
-    display.println("POWER OFF");
-  }
-  display.display();  
+  display.display();
+  display.startscrollright(0x02,0x04); //lines where each line 8 pixels 
 }
 
 int checkSwitch(int statusFlag) {
@@ -184,28 +183,28 @@ int checkComm(int switchStatusFlag) {
         cmdIndex = 0;
         
         if(strcmp(cmd, "PWRON")  == 0){
-          Serial.println("Command received: PWRON");
+          Serial.println(F("Command received: PWRON"));
           digitalWrite(LED_BUILTIN, HIGH);
           powerOnSeq();
           statusFlag = 1;
         }else if (strcmp(cmd, "PWROFF")  == 0) {
-          Serial.println("Command received: PWROFF");
+          Serial.println(F("Command received: PWROFF"));
           digitalWrite(LED_BUILTIN, LOW);
           powerOffSeq();
           statusFlag = 0;
         }else if (strcmp(cmd, "STATUS")  == 0) {
-          Serial.println("Command received: STATUS");
+          Serial.println(F("Command received: STATUS"));
           if((statusFlag == 1) && (switchStatusFlag == 1)) {
-            Serial.println("Comm AND Manual Set Power is ON");
+            Serial.println(F("Comm AND Manual Set Power is ON"));
           }else if ((statusFlag == 1) && (switchStatusFlag == 0)) {
-            Serial.println("Comm Set Power is ON");
+            Serial.println(F("Comm Set Power is ON"));
           }else if ((statusFlag == 0) && (switchStatusFlag == 1)) {
-            Serial.println("Manually Set Power is ON");           
+            Serial.println(F("Manually Set Power is ON"));           
           }else{
-            Serial.println("Power is OFF");   
+            Serial.println(F("Power is OFF"));   
           }
         }else{
-          Serial.println("Command received: unknown!");
+          Serial.println(F("Command received: unknown!"));
         }
         
       }else{
@@ -214,13 +213,19 @@ int checkComm(int switchStatusFlag) {
         }
       }
     }
-    displayRemoteControl(statusFlag);
-    displayPowerStatus(statusFlag);
     return statusFlag;  
 }
+
+int prevStatusFlag = 0;
+int prevSwitchStatusFlag = 0;
 
 void loop() {
   // put your main code here, to run repeatedly:
   statusFlag = checkComm(switchStatusFlag);
   switchStatusFlag = checkSwitch(statusFlag);
+  if((switchStatusFlag != prevSwitchStatusFlag) || (statusFlag != prevStatusFlag)) {
+    displayUpdate(statusFlag,switchStatusFlag);
+  }
+  prevStatusFlag = statusFlag;
+  prevSwitchStatusFlag = switchStatusFlag;  
 }
