@@ -10,22 +10,31 @@ PWROFF  = turn unit power off
 STATUS  = return the unit power on/off status
 */
 #include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+#include "SSD1306Ascii.h"
+#include "SSD1306AsciiWire.h"
+#include <SPI.h>
+#include <Ethernet.h>
 
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+// 0X3C+SA0 - 0x3C or 0x3D
+#define I2C_ADDRESS 0x3C
 
-// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+// Define proper RST_PIN if required.
+#define RST_PIN -1
 
+SSD1306AsciiWire oled;
+
+//pins
 const int voltageOne = 2;
 const int voltageTwo = 3;
 const int voltageThree = 4;
 const int switchOne = 5;
 const int switchTwo = 6;
 const int switchThree = 7;
+//const int MSS  = 10;
+//const int MOSI = 11;
+//const int MISO = 12;
+//const int SCLK = 13;
+
 const int MAX_CMD_LENGTH = 10;
 
 char cmd[10];
@@ -34,9 +43,27 @@ char incomingByte;
 int statusFlag;
 int switchStatusFlag;
 
+// Enter a MAC address and IP address for your controller below.
+// The IP address will be dependent on your local network.
+// gateway and subnet are optional:
+byte mac[] = {
+  0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+IPAddress ip(169, 254, 226, 177);
+IPAddress myDns(169, 254, 1, 1);
+IPAddress gateway(169, 254, 1, 1);
+IPAddress subnet(255, 255, 0, 0);
+
+
+// telnet defaults to port 23
+EthernetServer server(23);
+boolean alreadyConnected = false; // whether or not the client was connected previously
+
 void setup() {
+  Wire.begin();
+  Wire.setClock(400000L);
+  
   // put your setup code here, to run once:
-  pinMode(LED_BUILTIN, OUTPUT);
+  //pinMode(LED_BUILTIN, OUTPUT);
   pinMode(voltageOne, OUTPUT);
   pinMode(voltageTwo, OUTPUT);
   pinMode(voltageThree, OUTPUT);
@@ -50,37 +77,56 @@ void setup() {
   digitalWrite(voltageOne, HIGH);
   digitalWrite(voltageTwo, HIGH);
   digitalWrite(voltageThree, HIGH);
+  // You can use Ethernet.init(pin) to configure the CS pin
+  //Ethernet.init(10);  // Most Arduino shields
+  //Ethernet.init(5);   // MKR ETH shield
+  //Ethernet.init(0);   // Teensy 2.0
+  //Ethernet.init(20);  // Teensy++ 2.0
+  //Ethernet.init(15);  // ESP8266 with Adafruit Featherwing Ethernet
+  //Ethernet.init(33);  // ESP32 with Adafruit Featherwing Ethernet
+
+  // initialize the ethernet device
+  Ethernet.begin(mac, ip, myDns, gateway, subnet);
   Serial.begin(9600);
   
   while (!Serial) {
     ; //wait for serial port to connect. Needed for native usb only
   }
-  
-  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x64
-    Serial.println(F("SSD1306 allocation failed"));
-    for(;;); // Don't proceed, loop forever
+
+  oled.begin(&Adafruit128x64, I2C_ADDRESS);
+  oled.setFont(Adafruit5x7);
+
+//  Serial.print("*******     RELAY (POWER) CONTROLLER *********\n");
+//  Serial.print("*** COMMANDS ARE:| PWRON | PWROFF | STATUS |**\n");
+//  Serial.print("***************** PUTTY SETUP ****************\n");
+//  Serial.print("Terminal; Implicit CR in every LF\n");
+//  Serial.print("Terminal; Local echo Force on\n");
+//  Serial.print("Use CTRL+J to enter command in putty terminal.\n");
+//  Serial.print("**********************************************\n");
+
+  // Check for Ethernet hardware present
+  if (Ethernet.hardwareStatus() == EthernetNoHardware) {
+    Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
+    while (true) {
+      delay(1); // do nothing, no point running without Ethernet hardware
+    }
+  }
+  if (Ethernet.linkStatus() == LinkOFF) {
+    Serial.println("Ethernet cable is not connected.");
   }
 
-  Serial.print("*******     RELAY (POWER) CONTROLLER *********\n");
-  Serial.print("*** COMMANDS ARE:| PWRON | PWROFF | STATUS |**\n");
-  Serial.print("***************** PUTTY SETUP ****************\n");
-  Serial.print("Terminal; Implicit CR in every LF\n");
-  Serial.print("Terminal; Local echo Force on\n");
-  Serial.print("Use CTRL+J to enter command in putty terminal.\n");
-  Serial.print("**********************************************\n");
+  // start listening for clients
+  server.begin();
+
+  Serial.print("Chat server address:");
+  Serial.println(Ethernet.localIP());
+
 
   //add oled display
   delay(2000);
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0, 0);
-  // Display static text
-  display.println(F("DEV UNIT"));
-  display.setCursor(0, 8);
-  display.println(F("192.168.200.100"));
-  display.display();
+  oled.clear();
+  oled.println("DEV UNIT");
+  oled.println(Ethernet.localIP());
 }
 
 void powerOnSeq() {
@@ -108,30 +154,22 @@ void powerOffSeq() {
 }
 
 void displayUpdate(int statusFlag, int switchStatusFlag){
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0, 0);
-  display.println(F("DEV UNIT"));
-  display.setCursor(0, 8);
-  display.println(F("192.168.200.100"));
+  oled.clear();
+  oled.set1X();
+  oled.println("DEV UNIT");
+  oled.println(Ethernet.localIP());
   if (statusFlag == 1){
-    display.setCursor(0, 24);
-    display.println(F("EXTERNAL CONTROL"));
-    display.setTextSize(2);
-    display.setCursor(0, 45);
-    display.println(F("POWER ON"));
+    oled.set1X();
+    oled.println("\nEXTERNAL CONTROL");
+    oled.set2X();
+    oled.println("\nPOWER ON");
   }else if (switchStatusFlag == 1) {
-    display.setTextSize(2);
-    display.setCursor(0, 45);
-    display.println(F("POWER ON"));    
+    oled.set2X();
+    oled.println("\nPOWER ON");    
   }else{
-    display.setTextSize(2);
-    display.setCursor(0, 45);
-    display.println(F("POWER OFF"));
+    oled.set2X();
+    oled.println("\nPOWER OFF");
   }
-  display.display();
-  display.startscrollright(0x02,0x04); //lines where each line 8 pixels 
 }
 
 int checkSwitch(int statusFlag) {
@@ -169,51 +207,111 @@ int checkSwitch(int statusFlag) {
    return switchStatusFlag;   
 }
 
-int checkComm(int switchStatusFlag) {
-   //check the com port 
-   if (incomingByte=Serial.available()>0) {
-      
-      char byteIn = Serial.read();
-      cmd[cmdIndex] = byteIn; 
-      
+//int checkComm(int switchStatusFlag) {
+//   //check the com port 
+//   if (incomingByte=Serial.available()>0) {
+//      
+//      char byteIn = Serial.read();
+//      cmd[cmdIndex] = byteIn; 
+//      
+//      if(byteIn=='\n'){
+//        //command finished
+//        cmd[cmdIndex] = '\0';
+//        Serial.println(cmd);
+//        cmdIndex = 0;
+//        
+//        if(strcmp(cmd, "PWRON")  == 0){
+//          Serial.println(F("Command received: PWRON"));
+//          #digitalWrite(LED_BUILTIN, HIGH);
+//          powerOnSeq();
+//          statusFlag = 1;
+//        }else if (strcmp(cmd, "PWROFF")  == 0) {
+//          Serial.println(F("Command received: PWROFF"));
+//          #digitalWrite(LED_BUILTIN, LOW);
+//          powerOffSeq();
+//          statusFlag = 0;
+//        }else if (strcmp(cmd, "STATUS")  == 0) {
+//          Serial.println(F("Command received: STATUS"));
+//          if((statusFlag == 1) && (switchStatusFlag == 1)) {
+//            Serial.println(F("Comm AND Manual Set Power is ON"));
+//          }else if ((statusFlag == 1) && (switchStatusFlag == 0)) {
+//            Serial.println(F("Comm Set Power is ON"));
+//          }else if ((statusFlag == 0) && (switchStatusFlag == 1)) {
+//            Serial.println(F("Manually Set Power is ON"));           
+//          }else{
+//            Serial.println(F("Power is OFF"));   
+//          }
+//        }else{
+//          Serial.println(F("Command received: unknown!"));
+//        }
+//        
+//      }else{
+//        if(cmdIndex++ >= MAX_CMD_LENGTH){
+//          cmdIndex = 0;
+//        }
+//      }
+//    }
+//    return statusFlag;  
+//}
+
+int checkEth(int switchStatusFlag){
+  // wait for a new client:
+  EthernetClient client = server.available();
+
+  // when the client sends the first byte, say hello:
+  if (client) {
+    if (!alreadyConnected) {
+      // clear out the input buffer:
+      client.flush();
+      Serial.println("We have a new client");
+      client.println("Hello, valid commmands are STATUS PWRON PWROFF");
+      alreadyConnected = true;
+    }
+
+    if (client.available() > 0) {
+      // read the bytes incoming from the client:
+      char byteIn = client.read();
+      cmd[cmdIndex] = byteIn;
       if(byteIn=='\n'){
         //command finished
         cmd[cmdIndex] = '\0';
+        // echo the bytes back to the client:
+        //server.println(cmd);
+        // echo the bytes to the server as well:
         Serial.println(cmd);
         cmdIndex = 0;
-        
+
         if(strcmp(cmd, "PWRON")  == 0){
-          Serial.println(F("Command received: PWRON"));
-          digitalWrite(LED_BUILTIN, HIGH);
+          server.println("Command received: PWRON");
           powerOnSeq();
           statusFlag = 1;
         }else if (strcmp(cmd, "PWROFF")  == 0) {
-          Serial.println(F("Command received: PWROFF"));
-          digitalWrite(LED_BUILTIN, LOW);
+          server.println("Command received: PWROFF");
           powerOffSeq();
           statusFlag = 0;
         }else if (strcmp(cmd, "STATUS")  == 0) {
-          Serial.println(F("Command received: STATUS"));
+          server.println("Command received: STATUS");
           if((statusFlag == 1) && (switchStatusFlag == 1)) {
-            Serial.println(F("Comm AND Manual Set Power is ON"));
+            server.println("Comm AND Manual Set Power is ON");
           }else if ((statusFlag == 1) && (switchStatusFlag == 0)) {
-            Serial.println(F("Comm Set Power is ON"));
+            server.println("Comm Set Power is ON");
           }else if ((statusFlag == 0) && (switchStatusFlag == 1)) {
-            Serial.println(F("Manually Set Power is ON"));           
+            server.println("Manually Set Power is ON");           
           }else{
-            Serial.println(F("Power is OFF"));   
+            server.println("Power is OFF");   
           }
         }else{
-          Serial.println(F("Command received: unknown!"));
+          //server.println("Command received: unknown!");
         }
-        
+       
       }else{
-        if(cmdIndex++ >= MAX_CMD_LENGTH){
-          cmdIndex = 0;
-        }
+         if(cmdIndex++ >= MAX_CMD_LENGTH){
+          cmdIndex = 0;              
+         }  
       }
     }
-    return statusFlag;  
+  }
+  return statusFlag;
 }
 
 int prevStatusFlag = 0;
@@ -221,7 +319,7 @@ int prevSwitchStatusFlag = 0;
 
 void loop() {
   // put your main code here, to run repeatedly:
-  statusFlag = checkComm(switchStatusFlag);
+  statusFlag = checkEth(switchStatusFlag);
   switchStatusFlag = checkSwitch(statusFlag);
   if((switchStatusFlag != prevSwitchStatusFlag) || (statusFlag != prevStatusFlag)) {
     displayUpdate(statusFlag,switchStatusFlag);
