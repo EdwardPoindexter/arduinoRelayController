@@ -96,14 +96,6 @@ void setup() {
   oled.begin(&Adafruit128x64, I2C_ADDRESS);
   oled.setFont(Adafruit5x7);
 
-//  Serial.print("*******     RELAY (POWER) CONTROLLER *********\n");
-//  Serial.print("*** COMMANDS ARE:| PWRON | PWROFF | STATUS |**\n");
-//  Serial.print("***************** PUTTY SETUP ****************\n");
-//  Serial.print("Terminal; Implicit CR in every LF\n");
-//  Serial.print("Terminal; Local echo Force on\n");
-//  Serial.print("Use CTRL+J to enter command in putty terminal.\n");
-//  Serial.print("**********************************************\n");
-
   // Check for Ethernet hardware present
   if (Ethernet.hardwareStatus() == EthernetNoHardware) {
     Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
@@ -172,6 +164,26 @@ void displayUpdate(int statusFlag, int switchStatusFlag){
   }
 }
 
+//void serialHelp() {
+//    Serial.print("*******     RELAY (POWER) CONTROLLER *********\n");
+//    Serial.print("*COMMANDS ARE: PWRON | PWROFF | STATUS | HELP*\n");
+//    Serial.print("***************** PUTTY SETUP ****************\n");
+//    Serial.print("Terminal; Implicit CR in every LF\n");
+//    Serial.print("Terminal; Local echo Force on\n");
+//    Serial.print("Use CTRL+J to enter command in putty terminal.\n");
+//    Serial.print("**********************************************\n");
+//}
+
+void ethHelp() {
+    server.println("*******     RELAY (POWER) CONTROLLER *********");
+    server.println("*COMMANDS ARE: PWRON | PWROFF | STATUS | HELP*");
+    server.println("***************** PUTTY SETUP ****************");
+    server.println("Terminal; Implicit CR in every LF");
+    server.println("Terminal; Local echo Force on");
+    server.println("Use CTRL+J to enter command in putty terminal.");
+    server.println("**********************************************");
+}
+
 int checkSwitch(int statusFlag) {
   //check the state of external switches
   if (statusFlag == 0){
@@ -222,14 +234,15 @@ int checkSwitch(int statusFlag) {
 //        
 //        if(strcmp(cmd, "PWRON")  == 0){
 //          Serial.println(F("Command received: PWRON"));
-//          #digitalWrite(LED_BUILTIN, HIGH);
 //          powerOnSeq();
 //          statusFlag = 1;
 //        }else if (strcmp(cmd, "PWROFF")  == 0) {
 //          Serial.println(F("Command received: PWROFF"));
-//          #digitalWrite(LED_BUILTIN, LOW);
 //          powerOffSeq();
 //          statusFlag = 0;
+//        }else if (strcmp(cmd, "HELP")  == 0) {
+//          Serial.println(F("Command received: HELP"));
+//          serialHelp();
 //        }else if (strcmp(cmd, "STATUS")  == 0) {
 //          Serial.println(F("Command received: STATUS"));
 //          if((statusFlag == 1) && (switchStatusFlag == 1)) {
@@ -264,7 +277,8 @@ int checkEth(int switchStatusFlag){
       // clear out the input buffer:
       client.flush();
       Serial.println("We have a new client");
-      client.println("Hello, valid commmands are STATUS PWRON PWROFF");
+      //client.println("Hello, valid commmands are STATUS PWRON PWROFF");
+      ethHelp();
       alreadyConnected = true;
     }
 
@@ -289,6 +303,9 @@ int checkEth(int switchStatusFlag){
           server.println("Command received: PWROFF");
           powerOffSeq();
           statusFlag = 0;
+        }else if (strcmp(cmd, "HELP")  == 0) {
+          server.println("Command received: HELP");
+          ethHelp();         
         }else if (strcmp(cmd, "STATUS")  == 0) {
           server.println("Command received: STATUS");
           if((statusFlag == 1) && (switchStatusFlag == 1)) {
